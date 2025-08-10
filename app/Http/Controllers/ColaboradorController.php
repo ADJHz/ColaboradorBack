@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Colaborador;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use GuzzleHttp\Client;
 use Exception;
 
 class ColaboradorController extends Controller
@@ -15,6 +17,7 @@ class ColaboradorController extends Controller
      */
     public function index()
     {
+        Log::info('ColaboradorController@index called');
         try {
             $colaboradores = Colaborador::all();
 
@@ -29,19 +32,9 @@ class ColaboradorController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function create()
+    public function create(Request $request)
     {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
-     */
-    public function store(Request $request)
-    {
+        Log::info('ColaboradorController@create called', ['request' => $request->all()]);
         try {
             $request->validate([
                 'nombre_completo' => 'required',
@@ -65,12 +58,73 @@ class ColaboradorController extends Controller
 
             $colaborador->save();
 
+            $client = new Client();
+            $client->post('http://localhost:3000/notify', [
+                'json' => [
+                    'event' => 'colaborador-creado',
+                    'data' => $colaborador
+                ]
+            ]);
+
+
             return response()->json($colaborador, 201);
         } catch (Exception $e) {
             return response()->json(['error' => 'Error al crear colaborador: ' . $e->getMessage()], 500);
         }
     }
 
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        Log::info('ColaboradorController@store called', ['request' => $request->all()]);
+        try {
+            $request->validate([
+                'nombre_completo' => 'required',
+                'empresa' => 'required',
+                'area' => 'required',
+                'departamento' => 'required',
+                'puesto' => 'required',
+                'fotografia' => 'sometimes|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'fecha_de_alta' => 'required|date',
+                'estatus' => 'required',
+            ]);
+
+            $data = $request->except('fotografia');
+
+            // Forzar estatus a booleano
+            $data['estatus'] = filter_var($request->input('estatus'), FILTER_VALIDATE_BOOLEAN);
+
+            $colaborador = new Colaborador($data);
+
+            if ($request->hasFile('fotografia')) {
+                $fotografia = $request->file('fotografia');
+                $nombre_archivo = time() . '.' . $fotografia->getClientOriginalExtension();
+                $fotografia->move(public_path('fotografias'), $nombre_archivo);
+                $colaborador->fotografia = $nombre_archivo;
+            }
+
+            $colaborador->save();
+
+            $client = new Client();
+            $client->post('http://localhost:3000/notify', [
+                'json' => [
+                    'event' => 'colaborador-creado',
+                    'data' => $colaborador
+                ]
+            ]);
+
+            return response()->json($colaborador, 201);
+        } catch (Exception $e) {
+            Log::error('Error en ColaboradorController@store: ' . $e->getMessage());
+            return response()->json(['error' => 'Error al crear colaborador: ' . $e->getMessage()], 500);
+        }
+    }
     /**
      * Display the specified resource.
      *
@@ -79,6 +133,7 @@ class ColaboradorController extends Controller
      */
     public function show(string $id)
     {
+        Log::info('ColaboradorController@show called', ['id' => $id]);
         try {
             $colaborador = Colaborador::findOrFail($id);
 
@@ -107,12 +162,41 @@ class ColaboradorController extends Controller
      */
     public function update(Request $request, string $id)
     {
+        Log::info('ColaboradorController@update called', [
+            'id' => $id,
+            'request_all' => $request->all(),
+            'request_input' => $request->input(),
+            'request_json' => $request->json()->all(),
+            'headers' => $request->headers->all()
+        ]);
         try {
             $colaborador = Colaborador::findOrFail($id);
 
+            $data = $request->except('fotografia');
+            // Forzar estatus a booleano si existe en el request
+            if (isset($data['estatus'])) {
+                $data['estatus'] = filter_var($data['estatus'], FILTER_VALIDATE_BOOLEAN);
+            }
 
-            $colaborador->update($request->all());
+            $colaborador->fill($data);
 
+            // Si hay nueva fotografia, guárdala y actualiza el campo
+            if ($request->hasFile('fotografia')) {
+                $fotografia = $request->file('fotografia');
+                $nombre_archivo = time() . '.' . $fotografia->getClientOriginalExtension();
+                $fotografia->move(public_path('fotografias'), $nombre_archivo);
+                $colaborador->fotografia = $nombre_archivo;
+            }
+
+            $colaborador->save();
+
+            $client = new Client();
+            $client->post('http://localhost:3000/notify', [
+                'json' => [
+                    'event' => 'colaborador-actualizado',
+                    'data' => $colaborador
+                ]
+            ]);
 
             return response()->json($colaborador);
         } catch (Exception $e) {
@@ -127,12 +211,19 @@ class ColaboradorController extends Controller
      */
     public function destroy(string $id)
     {
+        Log::info('ColaboradorController@destroy called', ['id' => $id]);
         try {
             $colaborador = Colaborador::findOrFail($id);
 
             $colaborador->delete();
 
-
+            $client = new Client();
+            $client->post('http://localhost:3000/notify', [
+                'json' => [
+                    'event' => 'colaborador-eliminado',
+                    'data' => ['id' => $id]
+                ]
+            ]);
             return response()->json(null, 204);
         } catch (Exception $e) {
             return response()->json(['error' => 'Error al eliminar colaborador: ' . $e->getMessage()], 500);

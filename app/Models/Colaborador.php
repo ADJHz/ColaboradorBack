@@ -10,6 +10,7 @@ class Colaborador extends Model
     use HasFactory;
 
     protected $fillable = [
+        'id',
         'nombre_completo',
         'empresa',
         'area',
@@ -17,6 +18,6 @@ class Colaborador extends Model
         'puesto',
         'fotografia',
         'fecha_de_alta',
-        'estatus',
+        'estatus'
     ];
 }
