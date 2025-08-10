@@ -97,7 +97,6 @@ class ColaboradorController extends Controller
 
             $data = $request->except('fotografia');
 
-            // Forzar estatus a booleano
             $data['estatus'] = filter_var($request->input('estatus'), FILTER_VALIDATE_BOOLEAN);
 
             $colaborador = new Colaborador($data);
@@ -173,14 +172,13 @@ class ColaboradorController extends Controller
             $colaborador = Colaborador::findOrFail($id);
 
             $data = $request->except('fotografia');
-            // Forzar estatus a booleano si existe en el request
+
             if (isset($data['estatus'])) {
                 $data['estatus'] = filter_var($data['estatus'], FILTER_VALIDATE_BOOLEAN);
             }
 
             $colaborador->fill($data);
 
-            // Si hay nueva fotografia, guárdala y actualiza el campo
             if ($request->hasFile('fotografia')) {
                 $fotografia = $request->file('fotografia');
                 $nombre_archivo = time() . '.' . $fotografia->getClientOriginalExtension();
